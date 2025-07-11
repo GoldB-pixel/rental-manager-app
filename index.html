@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rental Manager App</title>
+</head>
+<body>
+
+<!-- Add your content here -->
+<!-- This part will be populated with the canvas content -->
+
+<!-- Add this to the Reports section in HTML -->
+<div id="reportAlerts"></div>
+<div>
+  <h3>Filter Tenants by Status</h3>
+  <select id="statusFilter" onchange="filterTenantsByStatus()">
+    <option value="all">All</option>
+    <option value="Paid">Paid</option>
+    <option value="Unpaid">Unpaid</option>
+  </select>
+</div>
+<div>
+  <h3>Export Rent Payments</h3>
+  <button onclick="exportPaymentsCSV()">Download CSV</button>
+</div>
+
+<!-- Include EmailJS library -->
+<script src="https://cdn.jsdelivr.net/npm/emailjs-com@2/dist/email.min.js"></script>
+<script>
+  (function() {
+    emailjs.init("YOUR_PUBLIC_KEY"); // Replace with your EmailJS public key
+  })();
+</script>
+
+<!-- Update tenant table header -->
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const tenantHeader = document.querySelector("#tenantTable thead tr");
+    if (tenantHeader && tenantHeader.children.length === 5) {
+      tenantHeader.innerHTML += "<th>Status</th><th>Paid Date</th><th>Actions</th>";
+    }
+    loadData('tenants', 'tenantTable');
+  });
+</script>
+
+<script>
+  document.getElementById("tenantForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    const name = document.getElementById("tenantName").value;
+    const unit = document.getElementById("unitReference").value;
+    const start = document.getElementById("leaseStart").value;
+    const end = document.getElementById("leaseEnd").value;
+    const rent = document.getElementById("monthlyRent").value;
+    const status = "Unpaid";
+    const paidDate = "";
+    addRow('tenantTable', [name, unit, start, end, rent, status, paidDate]);
+    saveData('tenants', 'tenantTable');
+    this.reset();
+  });
+
+  function addRow(tableId, rowData) {
+    const tbody = document.querySelector(`#${tableId} tbody`);
+    const row = document.createElement("tr");
+    row.innerHTML = rowData.map((cell, i) => `<td>${cell}</td>`).join('') +
+      `<td>
+        <button onclick="editRow(this, '${tableId}')">Edit</button>
+        <button onclick="deleteRow(this, '${tableId}')">Delete</button>
+        ${tableId === 'tenantTable' ? `
+          <button onclick="markAsPaid(this)">Mark as Paid</button>
+          <button onclick="sendReminder(this)">Send Reminder</button>
+        ` : ''}
+      </td>`;
+    tbody.appendChild(row);
+  }
+
+  function markAsPaid(button) {
+    const row = button.closest('tr');
+    const statusCell = row.children[5];
+    const paidDateCell = row.children[6];
+    const now = new Date().toLocaleDateString();
+    if (statusCell) statusCell.textContent = "Paid";
+    if (paidDateCell) paidDateCell.textContent = now;
+    saveData('tenants', 'tenantTable');
+  }
+
+  function sendReminder(button) {
+    const row = button.closest('tr');
+    const name = row.children[0].textContent;
+    const unit = row.children[1].textContent;
+    const rent = row.children[4].textContent;
+
+    const templateParams = {
+      to_name: name,
+      message: `Dear ${name}, your rent of $${rent} for unit ${unit} is due. Please make your payment as soon as possible.`
+    };
+
+    emailjs.send("YOUR_SERVICE_ID", "YOUR_TEMPLATE_ID", templateParams)
+      .then(function(response) {
+        alert("Reminder sent to " + name);
+      }, function(error) {
+        alert("Failed to send email: " + JSON.stringify(error));
+      });
+  }
+
+  function resetStatusesMonthly() {
+    const today = new Date();
+    if (today.getDate() === 1) {
+      const tenants = JSON.parse(localStorage.getItem('tenants')) || [];
+      const updated = tenants.map(t => [t[0], t[1], t[2], t[3], t[4], "Unpaid", ""]);
+      localStorage.setItem('tenants', JSON.stringify(updated));
+    }
+  }
+  resetStatusesMonthly();
+
+  function filterTenantsByStatus() {
+    const filter = document.getElementById("statusFilter").value;
+    const tbody = document.querySelector("#tenantTable tbody");
+    Array.from(tbody.rows).forEach(row => {
+      const status = row.cells[5]?.textContent;
+      row.style.display = (filter === "all" || filter === status) ? "" : "none";
+    });
+  }
+
+  function exportPaymentsCSV() {
+    const tenants = JSON.parse(localStorage.getItem('tenants')) || [];
+    const headers = ["Name", "Unit", "Start", "End", "Rent", "Status", "Paid Date"];
+    const csvRows = [headers.join(",")];
+    tenants.forEach(t => {
+      csvRows.push(t.map(val => `"${val}"`).join(","));
+    });
+    const csvContent = csvRows.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "rent_payments.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+</script>
+
+</body>
+</html>
